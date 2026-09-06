@@ -200,6 +200,13 @@ nodes:
         "output 'missing-nested-output' references unknown output 'absent' on workflow 'child'.",
       ]),
     );
+    const definitions = new Map(
+      listResources(set, 'workflow').map((resource) => [
+        resource.slug,
+        readWorkflowDefinition(resource.winner.path) as WorkflowDefinition,
+      ]),
+    );
+    expect(resolveWorkflowOutputs(definitions.get('invalid')!, definitions)).toEqual({});
   });
 
   // THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2).
@@ -292,11 +299,15 @@ nodes:
 `,
     });
     const messages = validateEffectiveSet(set, project).map((finding) => finding.message);
+    const definition = readWorkflowDefinition(
+      listResources(set, 'workflow').find((resource) => resource.slug === 'root')!.winner.path,
+    ) as WorkflowDefinition;
 
     expect(messages.filter((message) => message.includes("workflow 'absent'"))).toEqual([
       "node 'missing' references unknown workflow 'absent'.",
     ]);
     expect(messages.some((message) => message.includes("output 'final'"))).toBe(false);
+    expect(resolveWorkflowOutputs(definition, new Map([['root', definition]]))).toEqual({});
   });
 
   it('bounds output resolution when invalid nested definitions form a cycle', () => {
@@ -356,11 +367,11 @@ interface WorkflowManifest {
 const readWorkflowManifest = (out: string): WorkflowManifest =>
   JSON.parse(readFileSync(join(out, '.agents', '.outfitter', 'workflow-composition.json'), 'utf8')) as WorkflowManifest;
 
-// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.4). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. JSON listings and deterministic dump manifests expose resolved outputs while preserving workflow source files.
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.4). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. JSON listings and deterministic dump manifests name-sort resolved outputs, and dumps preserve workflow source bytes verbatim.
 describe('workflow output listing and export', () => {
   it('includes resolved inherited outputs in list workflows --json', async () => {
     const { catalog, home, project } = resolvedOutputCatalog();
-    enableWorkflow(catalog, 'root');
+    writeFileSync(join(catalog, 'settings.yml'), 'workflows:\n  - root\n  - leaf\n');
     const lines: string[] = [];
     const program = new Command();
     createListCommand({
@@ -374,11 +385,15 @@ describe('workflow output listing and export', () => {
     const payload = JSON.parse(lines[0]) as {
       resources: readonly { readonly slug: string; readonly outputs: Readonly<Record<string, unknown>> }[];
     };
-    expect(payload.resources).toHaveLength(1);
-    expect(payload.resources[0]).toMatchObject({
+    expect(payload.resources).toHaveLength(2);
+    expect(payload.resources.find((resource) => resource.slug === 'root')).toMatchObject({
       slug: 'root',
       outputs: { final: { from: 'leaf', type: 'issue', output: 'verdict' } },
     });
+    expect(Object.keys(payload.resources.find((resource) => resource.slug === 'leaf')?.outputs ?? {})).toEqual([
+      'verdict',
+      'z-commit',
+    ]);
   });
 
   // THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2, OFTR-013.4).
@@ -436,7 +451,8 @@ nodes:
     const out = join(root, 'dump');
 
     expect(executeDumpCommand({ homeDirectory: home, projectDirectory: project, workflow: 'root', out }).ok).toBe(true);
-    expect(readWorkflowManifest(out).workflows).toEqual([
+    const workflows = readWorkflowManifest(out).workflows;
+    expect(workflows).toEqual([
       {
         id: 'root',
         outputs: { final: { from: 'leaf', type: 'issue', output: 'verdict' } },
@@ -451,6 +467,15 @@ nodes:
         source: { layer: 'workspace', path: 'workflows/leaf/workflow.yaml' },
       },
     ]);
+    expect(Object.keys(workflows.find((workflow) => workflow.id === 'leaf')?.outputs ?? {})).toEqual([
+      'verdict',
+      'z-commit',
+    ]);
+    expect(
+      readFileSync(join(out, '.agents', 'workflows', 'leaf', 'workflow.yaml')).equals(
+        readFileSync(join(catalog, 'workflows', 'leaf', 'workflow.yaml')),
+      ),
+    ).toBe(true);
   });
 
   it('exports an empty outputs object for a workflow without declarations', () => {

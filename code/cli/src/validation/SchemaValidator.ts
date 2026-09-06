@@ -40,9 +40,7 @@ const validators: Record<SchemaName, ValidateFunction> = {
   workflow: ajv.compile(workflowSchema as AnySchema),
 };
 
-const outputValueValidators = Object.fromEntries(
-  WORKFLOW_OUTPUT_TYPES.map((type) => [type, ajv.compile(outputTypeSchemas[type] as AnySchema)]),
-) as Record<WorkflowOutputType, ValidateFunction>;
+const outputValueValidators = new Map<WorkflowOutputType, ValidateFunction>();
 
 export const createValidationResult = (issues: readonly ValidationIssue[]): ValidationResult => ({
   valid: issues.length === 0,
@@ -60,7 +58,11 @@ export const validateSchema = (schemaName: SchemaName, document: unknown): Valid
 };
 
 export const validateOutputValue = (type: WorkflowOutputType, value: unknown): ValidationResult => {
-  const validate = outputValueValidators[type];
+  let validate = outputValueValidators.get(type);
+  if (validate === undefined) {
+    validate = ajv.compile(outputTypeSchemas[type] as AnySchema);
+    outputValueValidators.set(type, validate);
+  }
 
   if (validate(value)) return createValidationResult([]);
 

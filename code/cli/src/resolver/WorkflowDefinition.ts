@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import { validateSchema } from '../validation/SchemaValidator.js';
+import type { WorkflowOutputType } from '../validation/SchemaValidator.js';
 import { parseYamlDocument } from '../validation/YamlDocument.js';
 
 export type WorkflowActor =
@@ -33,6 +34,10 @@ export interface WorkflowNode {
   readonly if?: string;
 }
 
+export type WorkflowOutput =
+  | { readonly from: string; readonly type: WorkflowOutputType; readonly output?: never }
+  | { readonly from: string; readonly output: string; readonly type?: never };
+
 export interface WorkflowDefinition {
   readonly version: 1;
   readonly id: string;
@@ -44,6 +49,7 @@ export interface WorkflowDefinition {
   readonly integrations?: Readonly<Record<string, WorkflowIntegration>>;
   readonly checks?: Readonly<Record<string, unknown>>;
   readonly triggers?: readonly Readonly<Record<string, unknown>>[];
+  readonly outputs?: Readonly<Record<string, WorkflowOutput>>;
   readonly nodes: readonly WorkflowNode[];
   readonly feedback?: readonly { readonly from: string; readonly to: string }[];
 }

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-outfitter.com/schemas/output-type.git-commit.schema.json",
+  "$comment": "Forge-neutral subset of GitHub GET /repos/{owner}/{repo}/commits/{ref} and Forgejo GET /repos/{owner}/{repo}/git/commits/{sha} responses.",
+  "title": "Git commit workflow output value",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["sha", "html_url", "repository"],
+  "properties": {
+    "sha": { "type": "string", "pattern": "^[A-Fa-f0-9]{40}$" },
+    "html_url": { "type": "string", "format": "uri" },
+    "repository": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }
+  }
+}

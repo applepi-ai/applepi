@@ -75,7 +75,7 @@ List resolvable resources across all layers, with the winning source for each sl
 | -------- | -------------------------------------------------------------------------- |
 | `[kind]` | Optional filter: `agents`, `skills`, `knowledge`, `commands`, `workflows`. |
 
-`--json` emits an object containing `ok`, `resources`, and `diagnostics`; diagnostics remain available when strict mode fails.
+`--json` emits an object containing `ok`, `resources`, and `diagnostics`; diagnostics remain available when strict mode fails. Each workflow resource entry also contains a name-sorted `outputs` object with resolved output types, or `{}` when the workflow declares none. Non-JSON output is unchanged. See [OFTR-013: Workflow Contract](../requirements/OFTR-013-workflow-contract.md).
 
 ## `outfitter validate`
 
@@ -96,7 +96,7 @@ Write the composed resource tree as a self-contained `.agents/` directory for re
 | `--workflow <id>` | Export one workflow, its nested workflows, and every referenced agent closure. |
 | `--out <dir>`     | Destination directory (default `./.agents`).                                   |
 
-Workflow dumps are non-executable configuration bundles. They contain the canonical workflow YAML, composed agent resources, and a hash/provenance manifest. A workflow dump refuses an existing destination instead of replacing user files.
+Workflow dumps are non-executable configuration bundles. They contain the canonical workflow YAML, composed agent resources, and a hash/provenance manifest whose `workflows[]` entries record resolved `outputs`. A workflow dump refuses an existing destination instead of replacing user files.
 
 > **Tasks and `outfitter task bake`** — baking a task and its inputs into an immutable execution artifact — are the subject of a separate upcoming RFC and are not part of this command surface yet. See [Tasks](./tasks.md).
 

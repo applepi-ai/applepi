@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-outfitter.com/schemas/output-type.pull-request.schema.json",
+  "$comment": "Forge-neutral subset of GitHub GET /repos/{owner}/{repo}/pulls/{pull_number} and Forgejo GET /repos/{owner}/{repo}/pulls/{index} responses.",
+  "title": "Pull request workflow output value",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["number", "html_url", "head", "base"],
+  "properties": {
+    "number": { "type": "integer", "minimum": 1 },
+    "html_url": { "type": "string", "format": "uri" },
+    "head": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["sha"],
+      "properties": { "sha": { "type": "string", "pattern": "^[A-Fa-f0-9]{40}$" } }
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["repo"],
+      "properties": {
+        "repo": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["full_name"],
+          "properties": { "full_name": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" } }
+        }
+      }
+    },
+    "merge_commit_sha": {
+      "oneOf": [{ "type": "string", "pattern": "^[A-Fa-f0-9]{40}$" }, { "type": "null" }]
+    }
+  }
+}

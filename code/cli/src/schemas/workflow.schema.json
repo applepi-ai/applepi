@@ -50,6 +50,32 @@
     "checks": { "type": "object" },
     "triggers": { "type": "array", "items": { "type": "object" } },
     "feedback": { "type": "array", "items": { "type": "object", "required": ["from", "to"] } },
+    "outputs": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "type"],
+            "properties": {
+              "from": { "type": "string" },
+              "type": { "enum": ["pull-request", "git-commit", "git-branch", "issue"] }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "output"],
+            "properties": {
+              "from": { "type": "string" },
+              "output": { "type": "string" }
+            }
+          }
+        ]
+      }
+    },
     "nodes": {
       "type": "array",
       "minItems": 1,

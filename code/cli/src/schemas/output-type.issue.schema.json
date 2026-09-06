@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-outfitter.com/schemas/output-type.issue.schema.json",
+  "$comment": "Forge-neutral subset of GitHub and Forgejo GET /repos/{owner}/{repo}/issues/{issue_number} responses.",
+  "title": "Issue workflow output value",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["number", "html_url", "repository"],
+  "properties": {
+    "number": { "type": "integer", "minimum": 1 },
+    "html_url": { "type": "string", "format": "uri" },
+    "repository": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }
+  }
+}

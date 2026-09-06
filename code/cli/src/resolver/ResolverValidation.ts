@@ -7,6 +7,7 @@ import type { EffectiveResourceSet, ResolvedResource } from './Resource.js';
 import { agentLocalKinds, findResource, listAgentResources, listResources } from './Resource.js';
 import { isWorkflowDefinitionIssue, readWorkflowDefinition } from './WorkflowDefinition.js';
 import type { WorkflowDefinition, WorkflowNode } from './WorkflowDefinition.js';
+import { resolveWorkflowOutputs } from './WorkflowOutput.js';
 
 export interface ValidationFinding {
   readonly severity: 'error' | 'warning';
@@ -386,6 +387,62 @@ const validateWorkflowNodeReferences = (
   ];
 };
 
+const missingNestedOutputFinding = (
+  workflow: WorkflowDefinition,
+  node: WorkflowNode,
+  name: string,
+  outputName: string | undefined,
+  definitions: ReadonlyMap<string, WorkflowDefinition>,
+): readonly ValidationFinding[] => {
+  const nested = node.workflow === undefined ? undefined : definitions.get(node.workflow);
+  return nested !== undefined && outputName !== undefined && nested.outputs?.[outputName] === undefined
+    ? [
+        workflowError(
+          workflow.id,
+          `output '${name}' references unknown output '${outputName}' on workflow '${node.workflow}'.`,
+        ),
+      ]
+    : [];
+};
+
+const validateWorkflowOutput = (
+  workflow: WorkflowDefinition,
+  definitions: ReadonlyMap<string, WorkflowDefinition>,
+  resolved: ReturnType<typeof resolveWorkflowOutputs>,
+  name: string,
+  output: NonNullable<WorkflowDefinition['outputs']>[string],
+): readonly ValidationFinding[] => {
+  const node = workflow.nodes.find((candidate) => candidate.id === output.from);
+  if (node === undefined)
+    return [workflowError(workflow.id, `output '${name}' references unknown node '${output.from}'.`)];
+  if (resolved[name] !== undefined) return [];
+  if (node.workflow !== undefined && output.type !== undefined)
+    return [
+      workflowError(
+        workflow.id,
+        `output '${name}' uses type with workflow node '${output.from}'; nested workflow outputs must use output.`,
+      ),
+    ];
+  if (node.action !== undefined && output.output !== undefined)
+    return [
+      workflowError(
+        workflow.id,
+        `output '${name}' maps output from action node '${output.from}'; action outputs must use type.`,
+      ),
+    ];
+  return missingNestedOutputFinding(workflow, node, name, output.output, definitions);
+};
+
+const validateWorkflowOutputs = (
+  workflow: WorkflowDefinition,
+  definitions: ReadonlyMap<string, WorkflowDefinition>,
+): readonly ValidationFinding[] => {
+  const resolved = resolveWorkflowOutputs(workflow, definitions);
+  return Object.entries(workflow.outputs ?? {}).flatMap(([name, output]) =>
+    validateWorkflowOutput(workflow, definitions, resolved, name, output),
+  );
+};
+
 const validateWorkflowArtifacts = (workflow: WorkflowDefinition): readonly ValidationFinding[] =>
   Object.entries(workflow.integrations ?? {}).flatMap(([id, artifact]) => {
     if (artifact.kind !== 'artifact') return [];
@@ -419,6 +476,8 @@ const validateWorkflow = (
     findings.push(...validateWorkflowNodeReferences(workflow, node, nodeIds, definitions));
     findings.push(...validateWorkflowAgentNode(set, workflow, node, options));
   }
+
+  findings.push(...validateWorkflowOutputs(workflow, definitions));
 
   for (const edge of workflow.feedback ?? []) {
     if (!nodeIds.has(edge.from))

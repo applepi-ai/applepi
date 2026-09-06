@@ -4,8 +4,13 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { discoverLayers } from '../../src/resolver/Layer.js';
+import { listResources } from '../../src/resolver/Resource.js';
+import { resolveResources } from '../../src/resolver/Resolver.js';
+import { validateEffectiveSet } from '../../src/resolver/ResolverValidation.js';
 import { readWorkflowDefinition } from '../../src/resolver/WorkflowDefinition.js';
 import type { WorkflowDefinition, WorkflowDefinitionIssue } from '../../src/resolver/WorkflowDefinition.js';
+import { resolveWorkflowOutputs } from '../../src/resolver/WorkflowOutput.js';
 import { validateOutputValue, WORKFLOW_OUTPUT_TYPES } from '../../src/validation/SchemaValidator.js';
 import type { WorkflowOutputType } from '../../src/validation/SchemaValidator.js';
 
@@ -34,6 +39,25 @@ nodes:
 
 const readIssue = (outputs: string): WorkflowDefinitionIssue =>
   readWorkflowDefinition(writeWorkflow(outputs)) as WorkflowDefinitionIssue;
+
+const writeCatalogWorkflow = (catalog: string, slug: string, content: string): void => {
+  const path = join(catalog, 'workflows', slug, 'workflow.yaml');
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+};
+
+const resolveCatalog = (catalogWorkflows: Readonly<Record<string, string>>) => {
+  const root = mkdtempSync(join(tmpdir(), 'outfitter-workflow-output-catalog-'));
+  roots.push(root);
+  const home = join(root, 'home');
+  const project = join(root, 'project');
+  const catalog = join(project, '.agents');
+  for (const [slug, content] of Object.entries(catalogWorkflows)) writeCatalogWorkflow(catalog, slug, content);
+  const set = resolveResources(
+    discoverLayers({ homeDirectory: home, projectDirectory: project, settings: { sources: [] } }).layers,
+  );
+  return { project, set };
+};
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -128,5 +152,126 @@ describe('workflow output value schemas', () => {
       WORKFLOW_OUTPUT_TYPES,
     );
     expect(schemaTypes).toEqual([...WORKFLOW_OUTPUT_TYPES].sort());
+  });
+});
+
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-012.2). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Output sources and nested mappings resolve only across compatible nodes and declared nested outputs.
+describe('workflow output reference validation', () => {
+  it('reports every invalid output source and mapping shape', () => {
+    const { project, set } = resolveCatalog({
+      child: `version: 1
+id: child
+title: Child
+description: Child workflow.
+actors: {}
+nodes:
+  - {id: work, action: work, description: Work.}
+`,
+      invalid: `version: 1
+id: invalid
+title: Invalid
+description: Invalid output references.
+actors: {}
+outputs:
+  missing-source: {from: absent, type: issue}
+  workflow-with-type: {from: nested, type: issue}
+  action-with-output: {from: work, output: result}
+  missing-nested-output: {from: nested, output: absent}
+nodes:
+  - {id: work, action: work, description: Work.}
+  - {id: nested, workflow: child, description: Run child.}
+`,
+    });
+
+    expect(validateEffectiveSet(set, project).map((finding) => finding.message)).toEqual(
+      expect.arrayContaining([
+        "output 'missing-source' references unknown node 'absent'.",
+        "output 'workflow-with-type' uses type with workflow node 'nested'; nested workflow outputs must use output.",
+        "output 'action-with-output' maps output from action node 'work'; action outputs must use type.",
+        "output 'missing-nested-output' references unknown output 'absent' on workflow 'child'.",
+      ]),
+    );
+  });
+
+  it('resolves output types through a two-level nested mapping chain', () => {
+    const { project, set } = resolveCatalog({
+      leaf: `version: 1
+id: leaf
+title: Leaf
+description: Produce a verdict.
+actors: {}
+outputs:
+  verdict: {from: decide, type: issue}
+nodes:
+  - {id: decide, action: decide, description: Decide.}
+`,
+      middle: `version: 1
+id: middle
+title: Middle
+description: Map the leaf verdict.
+actors: {}
+outputs:
+  result: {from: leaf, output: verdict}
+nodes:
+  - {id: leaf, workflow: leaf, description: Run leaf.}
+`,
+      root: `version: 1
+id: root
+title: Root
+description: Map the middle result.
+actors: {}
+outputs:
+  final: {from: middle, output: result}
+nodes:
+  - {id: middle, workflow: middle, description: Run middle.}
+`,
+    });
+    const findings = validateEffectiveSet(set, project);
+    const definitions = new Map(
+      listResources(set, 'workflow').map((resource) => {
+        const definition = readWorkflowDefinition(resource.winner.path) as WorkflowDefinition;
+        return [resource.slug, definition] as const;
+      }),
+    );
+
+    expect(findings).toEqual([]);
+    expect(resolveWorkflowOutputs(definitions.get('root')!, definitions)).toEqual({
+      final: { from: 'middle', type: 'issue', output: 'result' },
+    });
+  });
+
+  it('does not add an output error when the nested workflow itself is unknown', () => {
+    const { project, set } = resolveCatalog({
+      root: `version: 1
+id: root
+title: Root
+description: Reference an unknown workflow once.
+actors: {}
+outputs:
+  final: {from: missing, output: result}
+nodes:
+  - {id: missing, workflow: absent, description: Run missing workflow.}
+`,
+    });
+    const messages = validateEffectiveSet(set, project).map((finding) => finding.message);
+
+    expect(messages.filter((message) => message.includes("workflow 'absent'"))).toEqual([
+      "node 'missing' references unknown workflow 'absent'.",
+    ]);
+    expect(messages.some((message) => message.includes("output 'final'"))).toBe(false);
+  });
+
+  it('bounds output resolution when invalid nested definitions form a cycle', () => {
+    const cyclic = {
+      version: 1,
+      id: 'cycle',
+      title: 'Cycle',
+      description: 'Cycle output mappings.',
+      actors: {},
+      outputs: { result: { from: 'again', output: 'result' } },
+      nodes: [{ id: 'again', workflow: 'cycle', description: 'Recurse.' }],
+    } satisfies WorkflowDefinition;
+
+    expect(resolveWorkflowOutputs(cyclic, new Map([['cycle', cyclic]]))).toEqual({});
   });
 });

@@ -13,6 +13,10 @@ import {
   resourceKinds,
 } from '../../resolver/Resource.js';
 import { resolveEffectiveSet } from '../../resolver/ResolverContext.js';
+import { isWorkflowDefinitionIssue, readWorkflowDefinition } from '../../resolver/WorkflowDefinition.js';
+import type { WorkflowDefinition } from '../../resolver/WorkflowDefinition.js';
+import { resolveWorkflowOutputs } from '../../resolver/WorkflowOutput.js';
+import type { ResolvedWorkflowOutputs } from '../../resolver/WorkflowOutput.js';
 import { formatSettingsIssue } from '../../settings/SettingsLoader.js';
 import type { CommandObject } from './CommandObject.js';
 import { resolveHomeDirectory, resolveProjectDirectory } from './ProcessDefaults.js';
@@ -37,6 +41,7 @@ export interface ListResourceEntry {
   readonly layer: string;
   readonly path: string;
   readonly ownerAgent: string | null;
+  readonly outputs?: ResolvedWorkflowOutputs;
 }
 
 export interface ListCommandDependencies {
@@ -89,6 +94,34 @@ const listGlobalResources = (set: EffectiveResourceSet, kind: ResourceKind, enab
       })
     : listResources(set, kind);
 
+const readWorkflowDefinitions = (set: EffectiveResourceSet): ReadonlyMap<string, WorkflowDefinition> => {
+  const definitions = new Map<string, WorkflowDefinition>();
+  for (const resource of listResources(set, 'workflow')) {
+    const definition = readWorkflowDefinition(resource.winner.path);
+    if (!isWorkflowDefinitionIssue(definition)) definitions.set(resource.slug, definition);
+  }
+  return definitions;
+};
+
+const listEntry = (
+  resource: ReturnType<typeof listResources>[number],
+  definitions: ReadonlyMap<string, WorkflowDefinition>,
+): ListResourceEntry => {
+  const provenance = {
+    kind: resource.kind,
+    slug: resource.slug,
+    layer: resource.winner.layer.label,
+    path: resource.winner.path,
+    ownerAgent: resource.winner.ownerAgent ?? null,
+  };
+  if (resource.kind !== 'workflow') return provenance;
+  const definition = definitions.get(resource.slug);
+  return {
+    ...provenance,
+    outputs: definition === undefined ? {} : resolveWorkflowOutputs(definition, definitions),
+  };
+};
+
 export const executeListCommand = (input: ListInput): ListResult => {
   const { set, settings, settingsIssues, warnings, ambiguityWarnings } = resolveEffectiveSet(input);
 
@@ -105,6 +138,7 @@ export const executeListCommand = (input: ListInput): ListResult => {
 
   assertKnownAgent(set, input.agent);
   const entries: ListResourceEntry[] = [];
+  const definitions = readWorkflowDefinitions(set);
 
   for (const kind of resolveKindFilter(input.kind)) {
     const hasAgentContext = input.agent !== undefined && agentLocalKinds.includes(kind);
@@ -115,13 +149,7 @@ export const executeListCommand = (input: ListInput): ListResult => {
     entries.push(
       ...[...resources.values()]
         .sort((left, right) => compareSlugs(left.slug, right.slug))
-        .map((resource) => ({
-          kind: resource.kind,
-          slug: resource.slug,
-          layer: resource.winner.layer.label,
-          path: resource.winner.path,
-          ownerAgent: resource.winner.ownerAgent ?? null,
-        })),
+        .map((resource) => listEntry(resource, definitions)),
     );
 
     messages.push(`${pluralByKind.get(kind)!}${hasAgentContext ? ` (agent ${input.agent})` : ''}:`);

@@ -19,6 +19,7 @@ import type { EffectiveResourceSet } from '../resolver/Resource.js';
 import type { AgentDefaults, HarnessDefaults } from '../settings/Settings.js';
 import { isWorkflowDefinitionIssue, readWorkflowDefinition } from '../resolver/WorkflowDefinition.js';
 import type { WorkflowDefinition } from '../resolver/WorkflowDefinition.js';
+import { resolveWorkflowOutputs } from '../resolver/WorkflowOutput.js';
 import { dumpAgent } from './Dump.js';
 import type { DumpResult } from './Dump.js';
 import { escapesRoots } from './Containment.js';
@@ -101,6 +102,7 @@ export const dumpWorkflow = (
   const warnings: string[] = [];
   const errors: string[] = [];
   const compositions: unknown[] = [];
+  const definitions = new Map(closure.workflows.map((workflow) => [workflow.id, workflow] as const));
 
   try {
     for (const agent of closure.agents) {
@@ -157,6 +159,7 @@ export const dumpWorkflow = (
             const resource = findResource(set, 'workflow', workflow.id)!;
             return {
               id: workflow.id,
+              outputs: resolveWorkflowOutputs(workflow, definitions),
               source: {
                 layer: resource.winner.layer.label,
                 path: relative(resource.winner.layer.root, resource.winner.path),

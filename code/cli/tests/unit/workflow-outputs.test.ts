@@ -1,9 +1,12 @@
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
+import { Command } from 'commander';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { executeDumpCommand } from '../../src/cli/commands/DumpCommand.js';
+import { createListCommand } from '../../src/cli/commands/ListCommand.js';
 import { discoverLayers } from '../../src/resolver/Layer.js';
 import { listResources } from '../../src/resolver/Resource.js';
 import { resolveResources } from '../../src/resolver/Resolver.js';
@@ -56,7 +59,7 @@ const resolveCatalog = (catalogWorkflows: Readonly<Record<string, string>>) => {
   const set = resolveResources(
     discoverLayers({ homeDirectory: home, projectDirectory: project, settings: { sources: [] } }).layers,
   );
-  return { project, set };
+  return { catalog, home, project, root, set };
 };
 
 afterEach(() => {
@@ -273,5 +276,163 @@ nodes:
     } satisfies WorkflowDefinition;
 
     expect(resolveWorkflowOutputs(cyclic, new Map([['cycle', cyclic]]))).toEqual({});
+  });
+});
+
+const resolvedOutputCatalog = () =>
+  resolveCatalog({
+    leaf: `version: 1
+id: leaf
+title: Leaf
+description: Produce outputs.
+actors: {}
+outputs:
+  z-commit: {from: commit, type: git-commit}
+  verdict: {from: decide, type: issue}
+nodes:
+  - {id: commit, action: commit, description: Commit.}
+  - {id: decide, action: decide, description: Decide.}
+`,
+    root: `version: 1
+id: root
+title: Root
+description: Map the leaf verdict.
+actors: {}
+outputs:
+  final: {from: leaf, output: verdict}
+nodes:
+  - {id: leaf, workflow: leaf, description: Run leaf.}
+`,
+  });
+
+const enableWorkflow = (catalog: string, slug: string): void => {
+  writeFileSync(join(catalog, 'settings.yml'), `workflows:\n  - ${slug}\n`);
+};
+
+interface WorkflowManifest {
+  readonly workflows: readonly {
+    readonly id: string;
+    readonly outputs: Readonly<
+      Record<string, { readonly from: string; readonly type: string; readonly output?: string }>
+    >;
+  }[];
+}
+
+const readWorkflowManifest = (out: string): WorkflowManifest =>
+  JSON.parse(readFileSync(join(out, '.agents', '.outfitter', 'workflow-composition.json'), 'utf8')) as WorkflowManifest;
+
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-012.4). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. JSON listings and deterministic dump manifests expose resolved outputs while preserving workflow source files.
+describe('workflow output listing and export', () => {
+  it('includes resolved inherited outputs in list workflows --json', async () => {
+    const { catalog, home, project } = resolvedOutputCatalog();
+    enableWorkflow(catalog, 'root');
+    const lines: string[] = [];
+    const program = new Command();
+    createListCommand({
+      homeDirectory: home,
+      projectDirectory: project,
+      writeLine: (line) => lines.push(line),
+    }).register(program);
+
+    await program.parseAsync(['node', 'outfitter', 'list', 'workflows', '--json']);
+
+    const payload = JSON.parse(lines[0]) as {
+      resources: readonly { readonly slug: string; readonly outputs: Readonly<Record<string, unknown>> }[];
+    };
+    expect(payload.resources).toHaveLength(1);
+    expect(payload.resources[0]).toMatchObject({
+      slug: 'root',
+      outputs: { final: { from: 'leaf', type: 'issue', output: 'verdict' } },
+    });
+  });
+
+  it('uses an empty outputs object when listing a malformed workflow definition', async () => {
+    const { catalog, home, project } = resolveCatalog({ broken: 'version: [\n' });
+    enableWorkflow(catalog, 'broken');
+    const lines: string[] = [];
+    const program = new Command();
+    createListCommand({
+      homeDirectory: home,
+      projectDirectory: project,
+      writeLine: (line) => lines.push(line),
+    }).register(program);
+
+    await program.parseAsync(['node', 'outfitter', 'list', 'workflows', '--json']);
+
+    const payload = JSON.parse(lines[0]) as { resources: readonly { readonly outputs: unknown }[] };
+    expect(payload.resources[0]?.outputs).toEqual({});
+  });
+
+  it('records resolved outputs for every workflow in the composition manifest', () => {
+    const { catalog, home, project, root } = resolvedOutputCatalog();
+    enableWorkflow(catalog, 'root');
+    const out = join(root, 'dump');
+
+    expect(executeDumpCommand({ homeDirectory: home, projectDirectory: project, workflow: 'root', out }).ok).toBe(true);
+    expect(readWorkflowManifest(out).workflows).toEqual([
+      {
+        id: 'root',
+        outputs: { final: { from: 'leaf', type: 'issue', output: 'verdict' } },
+        source: { layer: 'workspace', path: 'workflows/root/workflow.yaml' },
+      },
+      {
+        id: 'leaf',
+        outputs: {
+          verdict: { from: 'decide', type: 'issue' },
+          'z-commit': { from: 'commit', type: 'git-commit' },
+        },
+        source: { layer: 'workspace', path: 'workflows/leaf/workflow.yaml' },
+      },
+    ]);
+  });
+
+  it('exports an empty outputs object for a workflow without declarations', () => {
+    const { catalog, home, project, root } = resolveCatalog({
+      plain: `version: 1
+id: plain
+title: Plain
+description: No outputs.
+actors: {}
+nodes:
+  - {id: work, action: work, description: Work.}
+`,
+    });
+    enableWorkflow(catalog, 'plain');
+    const out = join(root, 'plain-dump');
+
+    expect(executeDumpCommand({ homeDirectory: home, projectDirectory: project, workflow: 'plain', out }).ok).toBe(
+      true,
+    );
+    expect(readWorkflowManifest(out).workflows[0]?.outputs).toEqual({});
+  });
+
+  it('writes byte-identical files across two dumps with mapped outputs', () => {
+    const { catalog, home, project, root } = resolvedOutputCatalog();
+    enableWorkflow(catalog, 'root');
+    const firstOut = join(root, 'first');
+    const secondOut = join(root, 'second');
+    const first = executeDumpCommand({
+      homeDirectory: home,
+      projectDirectory: project,
+      workflow: 'root',
+      out: firstOut,
+    });
+    const second = executeDumpCommand({
+      homeDirectory: home,
+      projectDirectory: project,
+      workflow: 'root',
+      out: secondOut,
+    });
+    const firstRoot = join(firstOut, '.agents');
+    const secondRoot = join(secondOut, '.agents');
+    const firstFiles = first.writtenPaths.map((path) => relative(firstRoot, path));
+    const secondFiles = second.writtenPaths.map((path) => relative(secondRoot, path));
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(secondFiles).toEqual(firstFiles);
+    for (const path of firstFiles) {
+      expect(readFileSync(join(firstRoot, path)).equals(readFileSync(join(secondRoot, path)))).toBe(true);
+    }
   });
 });

@@ -430,7 +430,7 @@ const validateWorkflowOutput = (
         `output '${name}' maps output from action node '${output.from}'; action outputs must use type.`,
       ),
     ];
-  return missingNestedOutputFinding(workflow, node.workflow!, name, output.output, definitions);
+  return missingNestedOutputFinding(workflow, node.workflow!, name, output.output!, definitions);
 };
 
 const validateWorkflowOutputs = (

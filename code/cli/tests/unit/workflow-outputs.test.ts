@@ -96,7 +96,7 @@ const validOutputValues: Readonly<Record<WorkflowOutputType, unknown>> = {
   },
 };
 
-// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-012.2). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Workflow output declarations have exclusive, closed, schema-validated shapes.
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Workflow output declarations have exclusive, closed, schema-validated shapes.
 describe('workflow output declaration schema', () => {
   it('parses action outputs and nested output mappings', () => {
     const result = readWorkflowDefinition(
@@ -134,7 +134,7 @@ describe('workflow output declaration schema', () => {
   });
 });
 
-// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-012.3). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Every supported output type has a forge-neutral value schema synchronized with the workflow enum.
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.3). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Every supported output type has a forge-neutral value schema synchronized with the workflow enum.
 describe('workflow output value schemas', () => {
   it.each(WORKFLOW_OUTPUT_TYPES)('accepts a well-formed %s and rejects a missing required field', (type) => {
     expect(validateOutputValue(type, validOutputValues[type])).toEqual({ valid: true, issues: [] });
@@ -158,7 +158,7 @@ describe('workflow output value schemas', () => {
   });
 });
 
-// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-012.2). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Output sources and nested mappings resolve only across compatible nodes and declared nested outputs.
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Output sources and nested mappings resolve only across compatible nodes and declared nested outputs.
 describe('workflow output reference validation', () => {
   it('reports every invalid output source and mapping shape', () => {
     const { project, set } = resolveCatalog({
@@ -321,7 +321,7 @@ interface WorkflowManifest {
 const readWorkflowManifest = (out: string): WorkflowManifest =>
   JSON.parse(readFileSync(join(out, '.agents', '.outfitter', 'workflow-composition.json'), 'utf8')) as WorkflowManifest;
 
-// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-012.4). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. JSON listings and deterministic dump manifests expose resolved outputs while preserving workflow source files.
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.4). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. JSON listings and deterministic dump manifests expose resolved outputs while preserving workflow source files.
 describe('workflow output listing and export', () => {
   it('includes resolved inherited outputs in list workflows --json', async () => {
     const { catalog, home, project } = resolvedOutputCatalog();

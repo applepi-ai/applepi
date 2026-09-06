@@ -112,7 +112,7 @@ typed outputs rather than treating a workflow node edge as a task dependency.
 `outfitter validate --strict` validates the graph, output mappings, and complete composed dependency
 closure. `outfitter dump --workflow <slug>` produces a reviewable `.agents` bundle for distribution.
 Outfitter never schedules or executes the graph. See
-[OFTR-012: Workflow Contract](../requirements/OFTR-012-workflow-contract.md) for the normative
+[OFTR-013: Workflow Contract](../requirements/OFTR-013-workflow-contract.md) for the normative
 contract.
 
 #### Recording values

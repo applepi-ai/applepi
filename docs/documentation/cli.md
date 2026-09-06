@@ -75,7 +75,7 @@ List resolvable resources across all layers, with the winning source for each sl
 | -------- | -------------------------------------------------------------------------- |
 | `[kind]` | Optional filter: `agents`, `skills`, `knowledge`, `commands`, `workflows`. |
 
-`--json` emits an object containing `ok`, `resources`, and `diagnostics`; diagnostics remain available when strict mode fails. Each workflow resource entry also contains a name-sorted `outputs` object with resolved output types, or `{}` when the workflow declares none. Non-JSON output is unchanged. See [OFTR-012: Workflow Contract](../requirements/OFTR-012-workflow-contract.md).
+`--json` emits an object containing `ok`, `resources`, and `diagnostics`; diagnostics remain available when strict mode fails. Each workflow resource entry also contains a name-sorted `outputs` object with resolved output types, or `{}` when the workflow declares none. Non-JSON output is unchanged. See [OFTR-013: Workflow Contract](../requirements/OFTR-013-workflow-contract.md).
 
 ## `outfitter validate`
 

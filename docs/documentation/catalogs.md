@@ -89,7 +89,38 @@ Resources from all sources resolve by slug behind local layers, following [layer
 
 Each `workflows/<slug>/workflow.yaml` is a typed graph that names its human, agent, tool, and system actors. Agent actors reference ordinary catalog profiles. Node-level skill, prompt, and MCP assertions must already belong to the selected agent's composed closure. Nested workflow references resolve by slug and may not form cycles.
 
-`outfitter validate --strict` validates the graph and the complete composed dependency closure. `outfitter dump --workflow <slug>` produces a reviewable `.agents` bundle for distribution. Outfitter never schedules or executes the graph.
+A workflow can publish typed output declarations. An action node declares the output type directly;
+a nested-workflow node maps one of the nested workflow's declared outputs:
+
+```yaml
+outputs:
+  pull-request:
+    from: draft # an action node in this workflow
+    type: pull-request
+  review-verdict:
+    from: review # a nested-workflow node in this workflow
+    output: verdict # declared by the nested workflow
+```
+
+The closed type set is `pull-request`, `git-commit`, `git-branch`, and `issue`. A mapped output
+inherits the nested output's resolved type, including through multiple nesting levels.
+
+A node's `needs` list expresses ordering only among nodes in the same workflow. Cross-task
+prerequisites are an execution engine's responsibility: the engine evaluates them against declared,
+typed outputs rather than treating a workflow node edge as a task dependency.
+
+`outfitter validate --strict` validates the graph, output mappings, and complete composed dependency
+closure. `outfitter dump --workflow <slug>` produces a reviewable `.agents` bundle for distribution.
+Outfitter never schedules or executes the graph. See
+[OFTR-012: Workflow Contract](../requirements/OFTR-012-workflow-contract.md) for the normative
+contract.
+
+#### Recording values
+
+Outfitter declares outputs but does not record their concrete values; that belongs to the execution
+engine. A runtime carrying a value over A2A should use `outfitter-task/v1` artifact metadata with
+`output` set to the declared name, `type` set to its resolved type, and `value` validated against the
+corresponding output-type schema.
 
 ### Catalog dependencies (transitive sources)
 

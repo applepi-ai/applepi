@@ -22,8 +22,10 @@ const resolvedMappedType = (
 ): WorkflowOutputType | undefined => {
   if (workflowSlug === undefined) return undefined;
   const nested = definitions.get(workflowSlug);
-  const nestedOutput = nested?.outputs?.[outputName];
-  if (nested === undefined || nestedOutput === undefined) return undefined;
+  if (nested === undefined) return undefined;
+  const nestedOutputs = nested.outputs ?? {};
+  if (!Object.hasOwn(nestedOutputs, outputName)) return undefined;
+  const nestedOutput = nestedOutputs[outputName];
 
   const key = `${nested.id}\u0000${outputName}`;
   if (visited.has(key)) return undefined;
@@ -46,7 +48,7 @@ export const resolveWorkflowOutputs = (
   definition: WorkflowDefinition,
   definitions: ReadonlyMap<string, WorkflowDefinition>,
 ): ResolvedWorkflowOutputs => {
-  const resolved: Record<string, ResolvedWorkflowOutput> = {};
+  const resolved = Object.create(null) as Record<string, ResolvedWorkflowOutput>;
   const outputs = definition.outputs ?? {};
   for (const name of Object.keys(outputs).sort()) {
     const output = outputs[name];
@@ -55,5 +57,5 @@ export const resolveWorkflowOutputs = (
     resolved[name] =
       output.output === undefined ? { from: output.from, type } : { from: output.from, type, output: output.output };
   }
-  return resolved;
+  return { ...resolved };
 };

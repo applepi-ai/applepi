@@ -103,6 +103,12 @@ const readWorkflowDefinitions = (set: EffectiveResourceSet): ReadonlyMap<string,
   return definitions;
 };
 
+const workflowDefinitionsForKinds = (
+  set: EffectiveResourceSet,
+  kinds: readonly ResourceKind[],
+): ReadonlyMap<string, WorkflowDefinition> =>
+  kinds.includes('workflow') ? readWorkflowDefinitions(set) : new Map<string, WorkflowDefinition>();
+
 const listEntry = (
   resource: ReturnType<typeof listResources>[number],
   definitions: ReadonlyMap<string, WorkflowDefinition>,
@@ -138,9 +144,10 @@ export const executeListCommand = (input: ListInput): ListResult => {
 
   assertKnownAgent(set, input.agent);
   const entries: ListResourceEntry[] = [];
-  const definitions = readWorkflowDefinitions(set);
+  const kinds = resolveKindFilter(input.kind);
+  const definitions = workflowDefinitionsForKinds(set, kinds);
 
-  for (const kind of resolveKindFilter(input.kind)) {
+  for (const kind of kinds) {
     const hasAgentContext = input.agent !== undefined && agentLocalKinds.includes(kind);
     const globalResources = listGlobalResources(set, kind, settings.workflows!);
     const localResources = hasAgentContext ? listAgentResources(set, input.agent, kind) : [];

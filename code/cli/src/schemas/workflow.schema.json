@@ -52,7 +52,7 @@
     "feedback": { "type": "array", "items": { "type": "object", "required": ["from", "to"] } },
     "outputs": {
       "type": "object",
-      "propertyNames": { "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$" },
+      "propertyNames": { "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
       "additionalProperties": {
         "oneOf": [
           {

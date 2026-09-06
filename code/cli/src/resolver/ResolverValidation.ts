@@ -389,17 +389,17 @@ const validateWorkflowNodeReferences = (
 
 const missingNestedOutputFinding = (
   workflow: WorkflowDefinition,
-  node: WorkflowNode,
+  workflowSlug: string,
   name: string,
-  outputName: string | undefined,
+  outputName: string,
   definitions: ReadonlyMap<string, WorkflowDefinition>,
 ): readonly ValidationFinding[] => {
-  const nested = node.workflow === undefined ? undefined : definitions.get(node.workflow);
-  return nested !== undefined && outputName !== undefined && nested.outputs?.[outputName] === undefined
+  const nested = definitions.get(workflowSlug);
+  return nested !== undefined && !Object.hasOwn(nested.outputs ?? {}, outputName)
     ? [
         workflowError(
           workflow.id,
-          `output '${name}' references unknown output '${outputName}' on workflow '${node.workflow}'.`,
+          `output '${name}' references unknown output '${outputName}' on workflow '${workflowSlug}'.`,
         ),
       ]
     : [];
@@ -415,7 +415,7 @@ const validateWorkflowOutput = (
   const node = workflow.nodes.find((candidate) => candidate.id === output.from);
   if (node === undefined)
     return [workflowError(workflow.id, `output '${name}' references unknown node '${output.from}'.`)];
-  if (resolved[name] !== undefined) return [];
+  if (Object.hasOwn(resolved, name)) return [];
   if (node.workflow !== undefined && output.type !== undefined)
     return [
       workflowError(
@@ -430,7 +430,7 @@ const validateWorkflowOutput = (
         `output '${name}' maps output from action node '${output.from}'; action outputs must use type.`,
       ),
     ];
-  return missingNestedOutputFinding(workflow, node, name, output.output, definitions);
+  return missingNestedOutputFinding(workflow, node.workflow!, name, output.output, definitions);
 };
 
 const validateWorkflowOutputs = (

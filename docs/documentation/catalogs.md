@@ -89,8 +89,9 @@ Resources from all sources resolve by slug behind local layers, following [layer
 
 Each `workflows/<slug>/workflow.yaml` is a typed graph that names its human, agent, tool, and system actors. Agent actors reference ordinary catalog profiles. Node-level skill, prompt, and MCP assertions must already belong to the selected agent's composed closure. Nested workflow references resolve by slug and may not form cycles.
 
-A workflow can publish typed output declarations. An action node declares the output type directly;
-a nested-workflow node maps one of the nested workflow's declared outputs:
+A workflow can publish typed output declarations. Output names must start with a lowercase letter and
+otherwise follow the workflow node ID pattern. An action node declares the output type directly; a
+nested-workflow node maps one of the nested workflow's declared outputs:
 
 ```yaml
 outputs:

@@ -19,16 +19,16 @@ them. This contract defines the workflow resource and its typed output declarati
 
 ### OFTR-013.2: Output Declarations
 
-1. A workflow MAY declare an `outputs` object whose property names MUST match the workflow node ID
-   pattern.
+1. A workflow MAY declare an `outputs` object whose property names MUST start with a lowercase letter
+   and otherwise follow the workflow node ID pattern.
 2. Every output entry MUST take exactly one of two shapes: `{ from, type }` or `{ from, output }`.
    An output entry MUST NOT carry any other property.
 3. An output entry's `from` value MUST name a node in the declaring workflow.
 4. An output entry with `type` MUST name an action node. An output entry with `output` MUST name a
    nested-workflow node.
 5. An output entry with `output` MUST name an output declared by the referenced nested workflow.
-6. An action output's type is its declared `type`. A mapped output's type is the type of the named
-   nested workflow output, resolved through every mapping level.
+6. An action output's resolved type MUST be its declared `type`. A mapped output's resolved type MUST
+   be the resolved type of the named nested workflow output, resolved through every mapping level.
 7. Existing workflows without an `outputs` object MUST remain valid.
 
 ### OFTR-013.3: Output Value Types
@@ -52,9 +52,9 @@ them. This contract defines the workflow resource and its typed output declarati
 ### OFTR-013.5: Execution Boundary
 
 1. Outfitter MUST NOT execute workflows and MUST NOT record concrete output values.
-2. Recording concrete output values is the responsibility of the execution engine.
-3. Node `needs` references express only intra-workflow ordering. Cross-task dependencies MUST be
-   evaluated by an execution engine against declared workflow outputs.
+2. An execution engine, not Outfitter, MUST record concrete output values.
+3. Node `needs` references MUST express only intra-workflow ordering. Cross-task dependencies MUST
+   be evaluated by an execution engine against declared workflow outputs.
 4. A runtime carrying a workflow output value over A2A SHOULD use the `outfitter-task/v1` artifact
    metadata keys `output` for the declared output name, `type` for its resolved output type, and
    `value` for the concrete value validated against that type's schema.

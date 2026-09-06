@@ -96,7 +96,7 @@ const validOutputValues: Readonly<Record<WorkflowOutputType, unknown>> = {
   },
 };
 
-// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Workflow output declarations have exclusive, closed, schema-validated shapes.
+// THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2, OFTR-013.3.1). YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES. Workflow output declarations have exclusive, closed, schema-validated shapes.
 describe('workflow output declaration schema', () => {
   it('parses action outputs and nested output mappings', () => {
     const result = readWorkflowDefinition(
@@ -123,6 +123,12 @@ describe('workflow output declaration schema', () => {
     ['an extra output entry key', '  result: {from: draft, type: issue, label: Result}\n'],
   ])('rejects %s', (_description, outputs) => {
     expect(readIssue(outputs).message).toContain('workflow.yaml is invalid');
+  });
+
+  // THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2).
+  // YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES.
+  it('rejects an output name that starts with a number', () => {
+    expect(readIssue('  2: {from: draft, type: issue}\n').message).toContain('workflow.yaml is invalid');
   });
 
   it('rejects duplicate YAML output keys', () => {
@@ -193,6 +199,35 @@ nodes:
         "output 'action-with-output' maps output from action node 'work'; action outputs must use type.",
         "output 'missing-nested-output' references unknown output 'absent' on workflow 'child'.",
       ]),
+    );
+  });
+
+  // THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2).
+  // YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES.
+  it('reports incompatible workflow-node sources for an output named constructor', () => {
+    const { project, set } = resolveCatalog({
+      child: `version: 1
+id: child
+title: Child
+description: Child workflow.
+actors: {}
+nodes:
+  - {id: work, action: work, description: Work.}
+`,
+      root: `version: 1
+id: root
+title: Root
+description: Exercise a prototype-named output.
+actors: {}
+outputs:
+  constructor: {from: nested, type: issue}
+nodes:
+  - {id: nested, workflow: child, description: Run child.}
+`,
+    });
+
+    expect(validateEffectiveSet(set, project).map((finding) => finding.message)).toContain(
+      "output 'constructor' uses type with workflow node 'nested'; nested workflow outputs must use output.",
     );
   });
 
@@ -344,6 +379,38 @@ describe('workflow output listing and export', () => {
       slug: 'root',
       outputs: { final: { from: 'leaf', type: 'issue', output: 'verdict' } },
     });
+  });
+
+  // THIS TEST VALIDATES A HARD REQUIREMENT (OFTR-013.2, OFTR-013.4).
+  // YOU MUST NOT MODIFY THIS TEST UNLESS THE REQUIREMENT CHANGES.
+  it('resolves and lists a valid output named constructor', async () => {
+    const { catalog, home, project } = resolveCatalog({
+      root: `version: 1
+id: root
+title: Root
+description: Publish a prototype-named output.
+actors: {}
+outputs:
+  constructor: {from: work, type: issue}
+nodes:
+  - {id: work, action: work, description: Work.}
+`,
+    });
+    enableWorkflow(catalog, 'root');
+    const lines: string[] = [];
+    const program = new Command();
+    createListCommand({
+      homeDirectory: home,
+      projectDirectory: project,
+      writeLine: (line) => lines.push(line),
+    }).register(program);
+
+    await program.parseAsync(['node', 'outfitter', 'list', 'workflows', '--json']);
+
+    const payload = JSON.parse(lines[0]) as {
+      resources: readonly { readonly slug: string; readonly outputs: Readonly<Record<string, unknown>> }[];
+    };
+    expect(payload.resources[0]?.outputs).toEqual({ constructor: { from: 'work', type: 'issue' } });
   });
 
   it('uses an empty outputs object when listing a malformed workflow definition', async () => {
